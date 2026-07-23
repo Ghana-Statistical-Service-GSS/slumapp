@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ghana Urban Map — Slum Conditions Atlas</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#241B5A;          /* GSS brand indigo (statsghana.gov.gh) */
+    --ink-deep:#1C1445;     /* deepest indigo — gradients, header edge */
+    --violet:#3C2FA3;       /* GSS brand violet — secondary accent */
+    --ink-soft:#586889;     /* slate — secondary text */
+    --paper:#F5F1EA;        /* GSS warm cream page background */
+    --panel:#FFFFFF;
+    --line:#E4DFD3;         /* warm-toned hairline to match cream */
+    --gold:#E0B04D;         /* GSS brand gold accent */
+    --teal:#17C3B2;         /* interaction accent — selection / locate */
+    --c-none:#D6AF73;       /* 0 conditions — near-gold, pale */
+    --c-low:#C9913D;        /* 1 condition */
+    --c-mod:#B77100;        /* 2 conditions */
+    --c-high:#A55300;       /* mid step for gauge */
+    --c-vhigh:#8E3800;      /* 3 conditions */
+    --c-ext:#6D2400;        /* 4 conditions — deep sienna */
+    --radius:10px;
+    --shadow:0 6px 24px rgba(36,27,90,.16);
+    font-size:15px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Century Gothic','CenturyGothic','Jost',AppleGothic,sans-serif;
+    color:var(--ink);
+    background:var(--paper);
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+
+  /* ---------- Top bar ---------- */
+  header{
+    background:linear-gradient(120deg,var(--ink-deep) 0%,var(--ink) 45%,var(--violet) 100%);
+    color:#fff;border-bottom:3px solid var(--gold);
+    display:flex;align-items:center;gap:1.25rem;
+    padding:.65rem 1.1rem;z-index:1200;flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:center;gap:.7rem}
+  .brand-logo{
+    height:44px;width:44px;flex-shrink:0;border-radius:50%;
+    background:#fff;padding:2px;box-shadow:0 2px 10px rgba(0,0,0,.3);
+  }
+  .brand-text{display:flex;flex-direction:column;line-height:1.1}
+  .brand .eyebrow{
+    font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--gold);font-weight:600;
+  }
+  .brand h1{font-size:1.05rem;font-weight:700;letter-spacing:.01em}
+  .searchwrap{
+    position:relative;flex:1;min-width:220px;max-width:480px;margin-left:auto;
+  }
+  .searchwrap input{
+    width:100%;padding:.55rem .9rem .55rem 2.3rem;
+    border-radius:999px;border:1px solid rgba(255,255,255,.25);
+    background:rgba(255,255,255,.12);color:#fff;
+    font:inherit;font-size:.9rem;outline:none;
+  }
+  .searchwrap input::placeholder{color:rgba(255,255,255,.65)}
+  .searchwrap input:focus{background:#fff;color:var(--ink);border-color:var(--gold)}
+  .searchwrap svg{
+    position:absolute;left:.85rem;top:50%;transform:translateY(-50%);
+    width:15px;height:15px;stroke:rgba(255,255,255,.75);pointer-events:none;
+  }
+  .searchwrap input:focus + svg{stroke:var(--ink-soft)}
+  .suggest{
+    position:absolute;top:calc(100% + 6px);left:0;right:0;
+    background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);
+    max-height:280px;overflow:auto;display:none;z-index:1300;
+  }
+  .suggest.open{display:block}
+  .suggest button{
+    display:block;width:100%;text-align:left;background:none;border:none;
+    padding:.55rem .9rem;font:inherit;font-size:.88rem;color:var(--ink);cursor:pointer;
+  }
+  .suggest button small{display:block;color:var(--ink-soft);font-size:.72rem}
+  .suggest button:hover,.suggest button.active{background:var(--paper)}
+  .suggest .empty{padding:.6rem .9rem;font-size:.85rem;color:var(--ink-soft)}
+
+  /* ---------- Layout ---------- */
+  .app{flex:1;display:flex;min-height:0;position:relative}
+
+  /* Left sidebar */
+  aside.left{
+    width:290px;flex-shrink:0;background:var(--panel);
+    border-right:1px solid var(--line);
+    display:flex;flex-direction:column;z-index:1100;
+  }
+  .left .pad{padding:1rem 1rem .5rem}
+  .left h2{
+    font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-soft);font-weight:700;margin-bottom:.6rem;
+  }
+  .field{margin-bottom:.7rem}
+  .field label{
+    display:block;font-size:.72rem;font-weight:600;color:var(--ink-soft);
+    margin-bottom:.25rem;
+  }
+  .field select{
+    width:100%;padding:.5rem .6rem;font:inherit;font-size:.88rem;
+    border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);
+  }
+  .loclist-head{
+    display:flex;justify-content:space-between;align-items:baseline;
+    padding:.4rem 1rem .3rem;border-top:1px solid var(--line);
+  }
+  .loclist-head span.count{
+    font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--ink-soft);
+  }
+  .loclist{flex:1;overflow:auto;padding:.25rem .6rem 1rem}
+  .loclist button{
+    display:flex;justify-content:space-between;align-items:center;gap:.5rem;
+    width:100%;background:none;border:none;border-radius:8px;
+    padding:.5rem .55rem;font:inherit;font-size:.88rem;color:var(--ink);
+    cursor:pointer;text-align:left;
+  }
+  .loclist button:hover{background:var(--paper)}
+  .loclist button.selected{background:var(--ink);color:#fff}
+  .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.2)}
+  .loclist .none{padding:.8rem .55rem;font-size:.85rem;color:var(--ink-soft)}
+
+  /* Map */
+  .mapwrap{flex:1;position:relative;min-width:0}
+  #map{position:absolute;inset:0;background:#DCE4E8}
+
+  /* Basemap switcher */
+  .basemaps{
+    position:absolute;bottom:18px;left:12px;z-index:1000;
+    display:flex;gap:6px;background:rgba(255,255,255,.92);
+    padding:6px;border-radius:12px;box-shadow:var(--shadow);
+  }
+  .basemaps button{
+    border:1px solid var(--line);background:#fff;border-radius:8px;
+    font:inherit;font-size:.72rem;font-weight:600;color:var(--ink-soft);
+    padding:.35rem .6rem;cursor:pointer;
+  }
+  .basemaps button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .layer-toggle{
+    position:absolute;top:12px;right:12px;z-index:1000;
+    background:rgba(255,255,255,.92);border-radius:10px;box-shadow:var(--shadow);
+    padding:.45rem .7rem;display:flex;align-items:center;gap:.45rem;
+    font-size:.78rem;font-weight:600;color:var(--ink);
+  }
+  .layer-toggle input{accent-color:var(--ink);width:15px;height:15px}
+
+  /* Legend + locate stack (bottom-right) */
+  .legend-stack{
+    position:absolute;bottom:18px;right:12px;z-index:1000;
+    display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:170px;
+  }
+  .legend{
+    background:rgba(255,255,255,.94);border-radius:12px;box-shadow:var(--shadow);
+    padding:.7rem .85rem;font-size:.72rem;
+  }
+  .legend h3{
+    font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-soft);margin-bottom:.45rem;
+  }
+  .legend .row{display:flex;align-items:center;gap:.5rem;margin:.22rem 0}
+  .legend .sw{width:16px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.15)}
+  .legend .credit{
+    margin-top:.55rem;padding-top:.45rem;border-top:1px solid var(--line);
+    font-size:.64rem;color:var(--ink-soft);font-style:italic;
+  }
+  .locate-btn{
+    display:flex;align-items:center;justify-content:center;gap:.4rem;
+    padding:.45rem .6rem;border:1px solid var(--line);border-radius:10px;
+    background:rgba(255,255,255,.94);color:var(--ink);font:inherit;font-size:.76rem;font-weight:700;
+    cursor:pointer;box-shadow:var(--shadow);
+  }
+  .locate-btn:hover{background:var(--paper)}
+  .locate-btn.busy{opacity:.55;pointer-events:none}
+  .locate-btn.on{background:var(--teal);border-color:var(--teal);color:#fff}
+
+  /* Right detail panel */
+  aside.right{
+    width:340px;flex-shrink:0;background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    transform:translateX(110%);transition:transform .28s ease;
+    display:flex;flex-direction:column;z-index:1100;
+    position:absolute;top:14px;bottom:14px;right:12px;box-shadow:var(--shadow);
+  }
+  aside.right.open{transform:translateX(0)}
+  .right .head{
+    background:linear-gradient(120deg,var(--ink-deep) 0%,var(--ink) 55%,var(--violet) 130%);
+    color:#fff;padding:1rem 1.1rem .9rem;position:relative;
+  }
+  .right .head .eyebrow{
+    font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--gold);font-weight:600;
+  }
+  .right .head h2{font-size:1.25rem;font-weight:700;margin:.15rem 0 .1rem}
+  .right .head p{font-size:.78rem;color:rgba(255,255,255,.8)}
+  .right .close{
+    position:absolute;top:.7rem;right:.7rem;background:rgba(255,255,255,.15);
+    border:none;color:#fff;width:28px;height:28px;border-radius:50%;
+    font-size:1rem;cursor:pointer;line-height:1;
+  }
+  .right .body{flex:1;overflow:auto;padding:1rem 1.1rem 1.4rem}
+
+  .stat{border:1px solid var(--line);border-radius:var(--radius);padding:.75rem .85rem;margin-bottom:.7rem}
+  .stat .k{font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);font-weight:700}
+  .stat .v{
+    font-family:'IBM Plex Mono',monospace;font-size:1.35rem;font-weight:600;margin-top:.15rem;
+    display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap;
+  }
+  .stat .v small{font-size:.72rem;font-family:'Century Gothic','Jost',sans-serif;font-weight:600;color:var(--ink-soft)}
+  .badge{
+    display:inline-block;padding:.28rem .75rem;border-radius:999px;
+    font-size:.8rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+  }
+  .badge.slum{background:#FBE3DC;color:#8C2B18;border:1px solid #E9B4A4}
+  .badge.nonslum{background:#DDF0E7;color:#1E5C43;border:1px solid #A9D6C2}
+
+  /* deprivation pips */
+  .pips{display:flex;gap:6px;margin-top:.45rem}
+  .pip{flex:1;height:9px;border-radius:5px;background:var(--paper);border:1px solid var(--line)}
+  .pip.on{background:var(--c-high);border-color:var(--c-high)}
+
+  /* intensity gauge — signature element */
+  .gauge{margin-top:.5rem}
+  .gauge .track{
+    position:relative;height:14px;border-radius:8px;overflow:visible;
+    background:linear-gradient(90deg,var(--c-none) 0 4%,var(--c-low) 4% 25%,var(--c-mod) 25% 50%,var(--c-high) 50% 75%,var(--c-vhigh) 75% 95%,var(--c-ext) 95% 100%);
+    border:1px solid rgba(0,0,0,.12);
+  }
+  .gauge .marker{
+    position:absolute;top:-5px;width:4px;height:24px;background:var(--ink);
+    border-radius:2px;transform:translateX(-50%);box-shadow:0 0 0 2px #fff;
+  }
+  .gauge .ticks{
+    display:flex;justify-content:space-between;margin-top:.3rem;
+    font-family:'IBM Plex Mono',monospace;font-size:.62rem;color:var(--ink-soft);
+  }
+  .explainer{
+    background:var(--paper);border-left:3px solid var(--gold);
+    border-radius:0 var(--radius) var(--radius) 0;
+    padding:.8rem .9rem;font-size:.84rem;line-height:1.55;color:var(--ink);
+  }
+  .explainer strong{font-weight:700}
+  .right .foot{
+    padding:.6rem 1.1rem;border-top:1px solid var(--line);
+    font-size:.68rem;color:var(--ink-soft);
+  }
+
+  /* mobile */
+  @media (max-width:820px){
+    aside.left{position:absolute;inset:0 auto 0 0;transform:translateX(-100%);transition:transform .25s ease}
+    aside.left.open{transform:translateX(0)}
+    .menu-btn{display:inline-flex}
+    aside.right{width:min(340px,92vw)}
+  }
+  .menu-btn{
+    display:none;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);
+    color:#fff;border-radius:8px;padding:.4rem .6rem;font:inherit;font-size:.78rem;cursor:pointer;
+  }
+  @media (max-width:820px){.menu-btn{display:inline-flex}}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<header>
+  <button class="menu-btn" id="menuBtn" aria-label="Toggle filters">☰ Filters</button>
+  <div class="brand">
+    <img src="logo.png" alt="Ghana Statistical Service" class="brand-logo">
+    <div class="brand-text">
+      <span class="eyebrow">Ghana Statistical Service · 2021 PHC</span>
+      <h1>Ghana Urban Map — Slum Conditions</h1>
+    </div>
+  </div>
+  <div class="searchwrap">
+    <input id="search" type="text" placeholder="Search an urban locality…" autocomplete="off"
+           aria-label="Search urban localities">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round">
+      <circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/>
+    </svg>
+    <div class="suggest" id="suggest" role="listbox"></div>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- LEFT: filters -->
+  <aside class="left" id="leftPanel">
+    <div class="pad">
+      <h2>Filter localities</h2>
+      <div class="field">
+        <label for="regionSel">Region</label>
+        <select id="regionSel"><option value="">All regions</option></select>
+      </div>
+      <div class="field">
+        <label for="distSel">District</label>
+        <select id="distSel"><option value="">All districts</option></select>
+      </div>
+    </div>
+    <div class="loclist-head">
+      <h2 style="margin:0">Urban localities</h2>
+      <span class="count" id="locCount">0</span>
+    </div>
+    <div class="loclist" id="locList"></div>
+  </aside>
+
+  <!-- MAP -->
+  <div class="mapwrap">
+    <div id="map"></div>
+
+    <div class="layer-toggle">
+      <input type="checkbox" id="urbanToggle" checked>
+      <label for="urbanToggle">Urban slum layer</label>
+    </div>
+
+    <div class="basemaps" id="basemaps" role="group" aria-label="Basemap"></div>
+
+    <div class="legend-stack">
+      <button class="locate-btn" id="locateBtn" title="Zoom to my location" aria-label="Zoom to my location">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>
+          <line x1="12" y1="1.5" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22.5"/>
+          <line x1="1.5" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22.5" y2="12"/>
+        </svg>
+        <span>My location</span>
+      </button>
+      <div class="legend">
+        <h3>Conditions deprived of</h3>
+        <div class="row"><span class="sw" style="background:var(--c-none)"></span>0 · Non-slum</div>
+        <div class="row"><span class="sw" style="background:var(--c-low)"></span>1 condition</div>
+        <div class="row"><span class="sw" style="background:var(--c-mod)"></span>2 conditions</div>
+        <div class="row"><span class="sw" style="background:var(--c-vhigh)"></span>3 conditions</div>
+        <div class="row"><span class="sw" style="background:var(--c-ext)"></span>4 conditions</div>
+        <div class="credit">Created by Selaseh Akaho and Ahmed Salim</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: detail panel -->
+  <aside class="right" id="rightPanel" aria-live="polite">
+    <div class="head">
+      <button class="close" id="closeRight" aria-label="Close details">×</button>
+      <span class="eyebrow" id="dRegion">Region</span>
+      <h2 id="dName">Locality</h2>
+      <p id="dDistrict">District</p>
+    </div>
+    <div class="body">
+      <div class="stat">
+        <div class="k">Slum status</div>
+        <div class="v"><span class="badge" id="dStatus">—</span></div>
+      </div>
+      <div class="stat">
+        <div class="k">Conditions deprived of</div>
+        <div class="v"><span id="dDep">—</span><small>of 4 slum conditions</small></div>
+        <div class="pips" id="dPips"></div>
+      </div>
+      <div class="stat">
+        <div class="k">Intensity of deprivation</div>
+        <div class="v"><span id="dInt">—</span><small id="dIntClass"></small></div>
+        <div class="gauge">
+          <div class="track"><div class="marker" id="dMarker" style="left:0%"></div></div>
+          <div class="ticks"><span>0</span><span>1</span><span>2</span><span>3</span><span>4+</span></div>
+        </div>
+      </div>
+      <div class="explainer" id="dExplain"></div>
+    </div>
+    <div class="foot">
+      Slum conditions per UN-Habitat / GSS: improved water, improved sanitation, durable
+      housing, and sufficient living area (≤3 persons per room). Source: 2021 Population
+      and Housing Census, Ghana Statistical Service.
+    </div>
+  </aside>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ================= CONFIG ================= */
+const DATA_URL = 'GHUrban.geojson';   // keep the GeoJSON beside index.html in the repo
+const FILL_OPACITY = 0.45;            // 55% transparency — lower = more see-through
+
+const P = { name:'label', district:'Subdist', region:'Region',
+            slum:'slum', dep:'deprevation', intensity:'MEAN_intensity' };
+/* read intensity with fallback so older files using SUM_intensity still work */
+function getIntensity(p){ return +(p[P.intensity] ?? p['SUM_intensity'] ?? 0) || 0; }
+
+/* ================= MAP ================= */
+const map = L.map('map', { zoomControl:true }).setView([7.95, -1.03], 7);
+map.attributionControl.addAttribution('Created by Selaseh Akaho and Ahmed Salim · Ghana Statistical Service');
+
+const basemaps = {
+  'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+               {attribution:'&copy; OpenStreetMap contributors', maxZoom:19}),
+  'Google Streets': L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+               {subdomains:['mt0','mt1','mt2','mt3'], attribution:'Map data &copy; Google', maxZoom:20}),
+  'Google Satellite': L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+               {subdomains:['mt0','mt1','mt2','mt3'], attribution:'Imagery &copy; Google', maxZoom:20}),
+  'Google Hybrid': L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',
+               {subdomains:['mt0','mt1','mt2','mt3'], attribution:'Imagery &copy; Google', maxZoom:20}),
+  'Light':     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+               {attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:20}),
+  'Dark':      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+               {attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:20})
+};
+let currentBase = basemaps['OpenStreetMap'].addTo(map);
+
+const bmBox = document.getElementById('basemaps');
+Object.keys(basemaps).forEach((k,i)=>{
+  const b=document.createElement('button');
+  b.textContent=k; if(i===0)b.classList.add('active');
+  b.onclick=()=>{
+    map.removeLayer(currentBase); currentBase=basemaps[k].addTo(map);
+    bmBox.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+  };
+  bmBox.appendChild(b);
+});
+
+/* ============ STYLING / CLASSES ============ */
+function intensityClass(v){
+  if(v<=0)  return {label:'No slum',   color:getCSS('--c-none')};
+  if(v<1)   return {label:'Low',       color:getCSS('--c-low')};
+  if(v<2)   return {label:'Moderate',  color:getCSS('--c-mod')};
+  if(v<3)   return {label:'High',      color:getCSS('--c-high')};
+  if(v<4)   return {label:'Very high', color:getCSS('--c-vhigh')};
+  return       {label:'Extreme',   color:getCSS('--c-ext')};
+}
+function getCSS(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+function depClass(d){
+  d = Math.max(0, Math.min(4, Math.round(+d || 0)));
+  const cls = [
+    {label:'0 — non-slum',        color:getCSS('--c-none')},
+    {label:'1 condition',         color:getCSS('--c-low')},
+    {label:'2 conditions',        color:getCSS('--c-mod')},
+    {label:'3 conditions',        color:getCSS('--c-vhigh')},
+    {label:'4 conditions',        color:getCSS('--c-ext')}
+  ];
+  return cls[d];
+}
+
+function baseStyle(f){
+  const c = depClass(f.properties[P.dep]).color;
+  return { color:'#566F7B', weight:0.4, fillColor:c, fillOpacity:FILL_OPACITY }; /* light ash, thin */
+}
+const hoverStyle    = { weight:2.5, color:getCSS('--violet') };
+const selectedStyle = { weight:4.5, color:getCSS('--teal'), fillOpacity:Math.min(FILL_OPACITY+0.1,1) };
+
+/* ================= STATE ================= */
+let allFeatures=[], geoLayer=null, layerById=new Map(), selectedId=null;
+
+/* ================= LOAD ================= */
+fetch(DATA_URL)
+  .then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); })
+  .then(gj=>{
+    allFeatures = gj.features.map((f,i)=>{ f.__id = f.id ?? i; return f; });
+    geoLayer = L.geoJSON(gj, {
+      style: baseStyle,
+      onEachFeature: (f,l)=>{
+        layerById.set(f.__id, l);
+        l.on('mouseover', ()=>{ if(f.__id!==selectedId) l.setStyle(hoverStyle); });
+        l.on('mouseout',  ()=>{ if(f.__id!==selectedId) l.setStyle(baseStyle(f)); });
+        l.on('click', ()=> selectFeature(f, {zoom:false}));
+        l.bindTooltip(String(f.properties[P.name]||''), {sticky:true, direction:'top'});
+      }
+    }).addTo(map);
+    try{ map.fitBounds(geoLayer.getBounds().pad(0.15)); }catch(e){}
+    buildFilters();
+    renderList();
+  })
+  .catch(err=>{
+    document.getElementById('locList').innerHTML =
+      '<div class="none">Could not load GHUrban.geojson — make sure it sits in the same folder as index.html. ('+err+')</div>';
+  });
+
+/* ============ LAYER TOGGLE ============ */
+document.getElementById('urbanToggle').addEventListener('change', e=>{
+  if(!geoLayer) return;
+  e.target.checked ? geoLayer.addTo(map) : map.removeLayer(geoLayer);
+});
+
+
+/* ============ FILTERS (left) ============ */
+const regionSel=document.getElementById('regionSel');
+const distSel=document.getElementById('distSel');
+
+function buildFilters(){
+  const regions=[...new Set(allFeatures.map(f=>f.properties[P.region]).filter(Boolean))].sort();
+  regions.forEach(r=>regionSel.add(new Option(r,r)));
+  buildDistricts();
+}
+function buildDistricts(){
+  const r=regionSel.value;
+  distSel.length=1; // keep "All districts"
+  const pool=allFeatures.filter(f=>!r || f.properties[P.region]===r);
+  [...new Set(pool.map(f=>f.properties[P.district]).filter(Boolean))].sort()
+    .forEach(d=>distSel.add(new Option(d,d)));
+}
+regionSel.addEventListener('change', ()=>{ buildDistricts(); renderList(); });
+distSel  .addEventListener('change', renderList);
+
+function filteredFeatures(){
+  return allFeatures.filter(f=>
+    (!regionSel.value || f.properties[P.region]===regionSel.value) &&
+    (!distSel.value   || f.properties[P.district]===distSel.value)
+  ).sort((a,b)=>String(a.properties[P.name]).localeCompare(String(b.properties[P.name])));
+}
+
+function renderList(){
+  const list=document.getElementById('locList');
+  const feats=filteredFeatures();
+  document.getElementById('locCount').textContent=feats.length;
+  list.innerHTML='';
+  if(!feats.length){ list.innerHTML='<div class="none">No urban localities match this filter.</div>'; return; }
+  feats.forEach(f=>{
+    const b=document.createElement('button');
+    if(f.__id===selectedId) b.classList.add('selected');
+    const c=depClass(f.properties[P.dep]).color;
+    b.innerHTML=`<span>${f.properties[P.name]}</span><span class="dot" style="background:${c}"></span>`;
+    b.onclick=()=>selectFeature(f,{zoom:true});
+    list.appendChild(b);
+  });
+}
+
+/* ============ SEARCH (top) ============ */
+const searchInput=document.getElementById('search');
+const suggest=document.getElementById('suggest');
+let activeIdx=-1;
+
+searchInput.addEventListener('input', ()=>{
+  const q=searchInput.value.trim().toLowerCase();
+  activeIdx=-1;
+  if(!q){ suggest.classList.remove('open'); return; }
+  const hits=allFeatures.filter(f=>String(f.properties[P.name]||'').toLowerCase().includes(q)).slice(0,12);
+  suggest.innerHTML='';
+  if(!hits.length){ suggest.innerHTML='<div class="empty">No locality found.</div>'; }
+  hits.forEach(f=>{
+    const b=document.createElement('button');
+    b.setAttribute('role','option');
+    b.innerHTML=`${f.properties[P.name]}<small>${f.properties[P.district]} · ${f.properties[P.region]}</small>`;
+    b.onclick=()=>{ suggest.classList.remove('open'); searchInput.value=f.properties[P.name]; selectFeature(f,{zoom:true}); };
+    suggest.appendChild(b);
+  });
+  suggest.classList.add('open');
+});
+searchInput.addEventListener('keydown', e=>{
+  const opts=[...suggest.querySelectorAll('button')];
+  if(!opts.length) return;
+  if(e.key==='ArrowDown'){ e.preventDefault(); activeIdx=Math.min(activeIdx+1,opts.length-1); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); activeIdx=Math.max(activeIdx-1,0); }
+  else if(e.key==='Enter'){ e.preventDefault(); (opts[activeIdx]||opts[0]).click(); return; }
+  else return;
+  opts.forEach((o,i)=>o.classList.toggle('active',i===activeIdx));
+  opts[activeIdx].scrollIntoView({block:'nearest'});
+});
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.searchwrap')) suggest.classList.remove('open');
+});
+
+/* ============ SELECTION + RIGHT PANEL ============ */
+const rightPanel=document.getElementById('rightPanel');
+document.getElementById('closeRight').onclick=()=>{ rightPanel.classList.remove('open'); clearSelection(); };
+
+function clearSelection(){
+  if(selectedId!=null && layerById.has(selectedId)){
+    const f=allFeatures.find(x=>x.__id===selectedId);
+    layerById.get(selectedId).setStyle(baseStyle(f));
+  }
+  selectedId=null; renderList();
+}
+
+function selectFeature(f,{zoom}){
+  if(selectedId!=null && layerById.has(selectedId)){
+    const prev=allFeatures.find(x=>x.__id===selectedId);
+    layerById.get(selectedId).setStyle(baseStyle(prev));
+  }
+  selectedId=f.__id;
+  const lyr=layerById.get(f.__id);
+  if(lyr){ lyr.setStyle(selectedStyle); lyr.bringToFront();
+    if(zoom){ try{ map.fitBounds(lyr.getBounds().pad(0.3)); }catch(e){} } }
+  fillPanel(f.properties);
+  rightPanel.classList.add('open');
+  renderList();
+}
+
+function fillPanel(p){
+  const name=p[P.name]||'—', dist=p[P.district]||'—', reg=p[P.region]||'—';
+  const isSlum=String(p[P.slum]||'').toLowerCase().includes('slum') &&
+               !String(p[P.slum]||'').toLowerCase().startsWith('non');
+  const dep=Math.max(0,Math.min(4, Math.round(+p[P.dep]||0)));
+  const inten=getIntensity(p);
+  const cls=intensityClass(inten);
+
+  document.getElementById('dRegion').textContent=reg+' Region';
+  document.getElementById('dName').textContent=name;
+  document.getElementById('dDistrict').textContent=dist;
+
+  const badge=document.getElementById('dStatus');
+  badge.textContent=isSlum?'Slum':'Non-slum';
+  badge.className='badge '+(isSlum?'slum':'nonslum');
+
+  document.getElementById('dDep').textContent=dep;
+  const pips=document.getElementById('dPips'); pips.innerHTML='';
+  for(let i=0;i<4;i++){ const s=document.createElement('span'); s.className='pip'+(i<dep?' on':''); pips.appendChild(s); }
+
+  document.getElementById('dInt').textContent=inten.toFixed(2);
+  document.getElementById('dIntClass').textContent=cls.label;
+  document.getElementById('dMarker').style.left=(Math.min(inten,4.3)/4.3*100)+'%';
+
+  const conditions=['improved drinking water','improved sanitation','durable housing','sufficient living area'];
+  const depPhrase = dep===0 ? 'none of the four slum conditions'
+                  : dep===4 ? 'all four slum conditions'
+                  : `${dep} of the four slum conditions (${conditions.join(', ')})`;
+  document.getElementById('dExplain').innerHTML =
+    `<strong>${name}</strong>, an urban locality in ${dist} (${reg} Region), is classified as
+     <strong>${isSlum?'a slum locality':'a non-slum locality'}</strong>. On average, households here are
+     deprived of <strong>${depPhrase}</strong>. Its deprivation intensity score of
+     <strong>${inten.toFixed(2)}</strong> places it in the <strong>${cls.label.toLowerCase()}</strong> band
+     of the 0–4 slum intensity scale — ${
+       inten<=0 ? 'households show no slum characteristics.' :
+       inten<1  ? 'a small share of households experience at least one deprivation.' :
+       inten<2  ? 'most households experience at least one deprivation.' :
+       inten<3  ? 'households typically face multiple, overlapping deprivations.' :
+                  'deprivations are severe and overlapping across nearly all households, indicating priority need for upgrading interventions.'
+     }`;
+}
+
+/* ============ ZOOM TO CURRENT LOCATION ============ */
+const locateBtn=document.getElementById('locateBtn');
+let locMarker=null, locCircle=null, locActive=false;
+
+locateBtn.addEventListener('click', ()=>{
+  if(locActive){ clearLocation(); return; }
+  if(!navigator.geolocation){ alert('Geolocation is not supported by this browser.'); return; }
+  locateBtn.classList.add('busy');
+  navigator.geolocation.getCurrentPosition(pos=>{
+    locateBtn.classList.remove('busy'); locateBtn.classList.add('on'); locActive=true;
+    const ll=[pos.coords.latitude,pos.coords.longitude];
+    const acc=pos.coords.accuracy||0;
+    const teal=getCSS('--teal');
+    locCircle=L.circle(ll,{radius:acc,color:teal,weight:1.5,fillColor:teal,fillOpacity:.12}).addTo(map);
+    locMarker=L.circleMarker(ll,{radius:7,color:'#fff',weight:2.5,fillColor:teal,fillOpacity:1})
+      .addTo(map).bindTooltip('You are here',{direction:'top'});
+    map.fitBounds(locCircle.getBounds().pad(0.4),{maxZoom:16});
+  }, err=>{
+    locateBtn.classList.remove('busy');
+    alert('Could not get your location: '+err.message+
+      (location.protocol==='http:'?' (geolocation requires HTTPS — it will work on GitHub Pages).':''));
+  }, {enableHighAccuracy:true, timeout:12000, maximumAge:30000});
+});
+function clearLocation(){
+  if(locMarker){map.removeLayer(locMarker);locMarker=null;}
+  if(locCircle){map.removeLayer(locCircle);locCircle=null;}
+  locActive=false; locateBtn.classList.remove('on');
+}
+
+/* ============ mobile left panel ============ */
+document.getElementById('menuBtn').onclick=()=>document.getElementById('leftPanel').classList.toggle('open');
+</script>
+</body>
+</html>
