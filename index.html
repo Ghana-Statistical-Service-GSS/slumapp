@@ -390,7 +390,7 @@ const P = { name:'label', district:'Subdist', region:'Region',
 function getIntensity(p){ return +(p[P.intensity] ?? p['SUM_intensity'] ?? 0) || 0; }
 
 /* ================= MAP ================= */
-const map = L.map('map', { zoomControl:true }).setView([7.95, -1.03], 7);
+const map = L.map('map', { zoomControl:true, zoomSnap:0.25, zoomDelta:0.5 }).setView([7.95, -1.03], 7);
 map.attributionControl.addAttribution('Created by Selaseh Akaho and Ahmed Salim · Ghana Statistical Service');
 
 const basemaps = {
@@ -469,7 +469,7 @@ fetch(DATA_URL)
         l.bindTooltip(String(f.properties[P.name]||''), {sticky:true, direction:'top'});
       }
     }).addTo(map);
-    try{ map.fitBounds(geoLayer.getBounds().pad(0.15)); }catch(e){}
+    try{ map.fitBounds(geoLayer.getBounds().pad(0.02)); }catch(e){}
     buildFilters();
     renderList();
   })
