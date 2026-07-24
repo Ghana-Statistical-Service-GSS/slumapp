@@ -132,8 +132,8 @@
   #map{position:absolute;inset:0;background:#DCE4E8}
 
   /* Basemap switcher */
+  .basemap-wrap{position:absolute;bottom:18px;left:12px;z-index:1000}
   .basemaps{
-    position:absolute;bottom:18px;left:12px;z-index:1000;
     display:flex;gap:6px;background:rgba(255,255,255,.92);
     padding:6px;border-radius:12px;box-shadow:var(--shadow);
   }
@@ -143,6 +143,15 @@
     padding:.35rem .6rem;cursor:pointer;
   }
   .basemaps button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip-toggle{
+    display:none;align-items:center;gap:.4rem;
+    padding:.5rem .7rem;border:1px solid var(--line);border-radius:12px;
+    background:rgba(255,255,255,.94);color:var(--ink);font:inherit;font-size:.76rem;font-weight:700;
+    cursor:pointer;box-shadow:var(--shadow);
+  }
+  .chip-toggle svg{flex-shrink:0;stroke:var(--ink)}
+  .chip-toggle .chev{margin-left:.15rem;font-size:.65rem;color:var(--ink-soft);transition:transform .2s ease}
+  .chip-toggle.open .chev{transform:rotate(180deg)}
   .layer-toggle{
     position:absolute;top:12px;right:12px;z-index:1000;
     background:rgba(255,255,255,.92);border-radius:10px;box-shadow:var(--shadow);
@@ -257,6 +266,18 @@
     aside.left.open{transform:translateX(0)}
     .menu-btn{display:inline-flex}
     aside.right{width:min(340px,92vw)}
+
+    .chip-toggle{display:inline-flex}
+    .basemaps{
+      display:none;position:absolute;bottom:calc(100% + 8px);left:0;
+      flex-wrap:wrap;max-width:min(260px,60vw);
+    }
+    .basemaps.open{display:flex}
+    .legend{
+      display:none;position:absolute;bottom:calc(100% + 8px);right:0;
+      min-width:170px;
+    }
+    .legend.open{display:block}
   }
   .menu-btn{
     display:none;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);
@@ -318,7 +339,16 @@
       <label for="urbanToggle">Urban slum layer</label>
     </div>
 
-    <div class="basemaps" id="basemaps" role="group" aria-label="Basemap"></div>
+    <div class="basemap-wrap">
+      <button class="chip-toggle" id="basemapToggle" aria-label="Toggle basemap options" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
+        </svg>
+        <span id="basemapToggleLabel">OpenStreetMap</span>
+        <span class="chev">▾</span>
+      </button>
+      <div class="basemaps" id="basemaps" role="group" aria-label="Basemap"></div>
+    </div>
 
     <div class="legend-stack">
       <button class="locate-btn" id="locateBtn" title="Zoom to my location" aria-label="Zoom to my location">
@@ -329,7 +359,14 @@
         </svg>
         <span>My location</span>
       </button>
-      <div class="legend">
+      <button class="chip-toggle" id="legendToggle" aria-label="Toggle legend" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v10"/>
+        </svg>
+        <span>Legend</span>
+        <span class="chev">▾</span>
+      </button>
+      <div class="legend" id="legendPanel">
         <h3>Conditions deprived of</h3>
         <div class="row"><span class="sw" style="background:var(--c-none)"></span>0 · Non-slum</div>
         <div class="row"><span class="sw" style="background:var(--c-low)"></span>1 condition</div>
@@ -410,6 +447,8 @@ const basemaps = {
 let currentBase = basemaps['OpenStreetMap'].addTo(map);
 
 const bmBox = document.getElementById('basemaps');
+const basemapToggle = document.getElementById('basemapToggle');
+const basemapToggleLabel = document.getElementById('basemapToggleLabel');
 Object.keys(basemaps).forEach((k,i)=>{
   const b=document.createElement('button');
   b.textContent=k; if(i===0)b.classList.add('active');
@@ -417,8 +456,26 @@ Object.keys(basemaps).forEach((k,i)=>{
     map.removeLayer(currentBase); currentBase=basemaps[k].addTo(map);
     bmBox.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
     b.classList.add('active');
+    basemapToggleLabel.textContent=k;
+    bmBox.classList.remove('open'); basemapToggle.classList.remove('open');
+    basemapToggle.setAttribute('aria-expanded','false');
   };
   bmBox.appendChild(b);
+});
+
+/* ============ MOBILE POP-UP TOGGLES (basemap + legend) ============ */
+const legendToggle = document.getElementById('legendToggle');
+const legendPanel = document.getElementById('legendPanel');
+function togglePopup(btn, panel){
+  const open = panel.classList.toggle('open');
+  btn.classList.toggle('open', open);
+  btn.setAttribute('aria-expanded', String(open));
+}
+basemapToggle.addEventListener('click', ()=> togglePopup(basemapToggle, bmBox));
+legendToggle.addEventListener('click', ()=> togglePopup(legendToggle, legendPanel));
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.basemap-wrap')){ bmBox.classList.remove('open'); basemapToggle.classList.remove('open'); basemapToggle.setAttribute('aria-expanded','false'); }
+  if(!e.target.closest('.legend-stack')){ legendPanel.classList.remove('open'); legendToggle.classList.remove('open'); legendToggle.setAttribute('aria-expanded','false'); }
 });
 
 /* ============ STYLING / CLASSES ============ */
